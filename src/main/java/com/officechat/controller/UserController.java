@@ -2,6 +2,7 @@
 package com.officechat.controller;
 
 import com.officechat.dto.CreateUserRequest;
+import com.officechat.dto.ResetPasswordRequest;
 import com.officechat.dto.UpdateUserRequest;
 import com.officechat.dto.UserResponse;
 import com.officechat.service.UserService;
@@ -9,9 +10,18 @@ import com.officechat.service.UserService;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+
+import com.officechat.dto.ResetPasswordRequest;
+import jakarta.validation.Valid;
+import java.util.Map;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @RestController
 @RequestMapping("/api/users")
@@ -48,4 +58,18 @@ public class UserController {
 
         return userService.updateUser(id, request);
     }
+    
+    
+    @PutMapping("/{id}/password")
+    public ResponseEntity<?> resetPassword(
+            @PathVariable Long id,
+            @Valid @RequestBody ResetPasswordRequest request) {
+    
+        userService.resetPassword(id, request.newPassword());
+    
+        return ResponseEntity.ok(
+            Map.of("message", "Password berhasil diperbarui")
+        );
+    }
+
 }

@@ -1,3 +1,4 @@
+
 package com.officechat.security;
 
 import com.officechat.entity.User;
@@ -6,10 +7,11 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.security.Principal;
 import java.util.Collection;
 import java.util.List;
 
-public class UserPrincipal implements UserDetails {
+public class UserPrincipal implements UserDetails, Principal {
 
     private final Long userId;
     private final String employeeId;
@@ -34,6 +36,11 @@ public class UserPrincipal implements UserDetails {
     }
 
     public String getEmail() {
+        return email;
+    }
+
+    @Override
+    public String getName() {
         return email;
     }
 

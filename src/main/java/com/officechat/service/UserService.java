@@ -191,4 +191,19 @@ public class UserService {
                 user.getIsOnline()
         );
     }
+    
+    
+public void resetPassword(Long userId, String newPassword) {
+
+    User user = userRepository.findById(userId)
+        .orElseThrow(() ->
+            new RuntimeException("User tidak ditemukan")
+        );
+
+    user.setPasswordHash(passwordEncoder.encode(newPassword));
+
+    userRepository.save(user);
 }
+
+}
+

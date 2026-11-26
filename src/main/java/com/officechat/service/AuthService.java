@@ -2,12 +2,11 @@ package com.officechat.service;
 
 import com.officechat.dto.AuthRequest;
 import com.officechat.dto.AuthResponse;
-import com.officechat.dto.UserResponse;
+// import com.officechat.dto.UserResponse;
 import com.officechat.entity.User;
 import com.officechat.entity.UserSession;
 import com.officechat.repository.UserRepository;
 import com.officechat.repository.UserSessionRepository;
-import com.officechat.security.JwtService;
 import com.officechat.security.UserPrincipal;
 
 import jakarta.servlet.http.HttpServletRequest;

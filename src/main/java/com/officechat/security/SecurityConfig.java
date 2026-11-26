@@ -1,3 +1,4 @@
+
 package com.officechat.security;
 
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -13,16 +14,22 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import org.springframework.web.cors.CorsConfigurationSource;
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    private final CorsConfigurationSource corsConfigurationSource;
+
     public SecurityConfig(
-            JwtAuthenticationFilter jwtAuthenticationFilter) {
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            CorsConfigurationSource corsConfigurationSource) {
 
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.corsConfigurationSource = corsConfigurationSource;
     }
 
     // Mencegah filter terdaftar dua kali.
@@ -44,6 +51,11 @@ public class SecurityConfig {
             HttpSecurity http) throws Exception {
 
         http
+            // Mengaktifkan CORS.
+            .cors(cors -> cors
+                .configurationSource(corsConfigurationSource)
+            )
+
             .csrf(csrf -> csrf.disable())
 
             .sessionManagement(session ->
@@ -69,6 +81,18 @@ public class SecurityConfig {
                     HttpMethod.POST,
                     "/api/users"
                 ).permitAll()
+
+                .requestMatchers(
+                    "/api/auth/login",
+                    "/api/health",
+                    "/ws",
+                    "/ws/**"
+                ).permitAll()
+                
+                .requestMatchers(
+                    HttpMethod.PUT,
+                    "/api/users/*/password"
+                ).hasRole("ADMIN")
 
                 .anyRequest().authenticated()
             )

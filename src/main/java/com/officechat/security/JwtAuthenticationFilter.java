@@ -1,6 +1,7 @@
 
 package com.officechat.security;
 
+import com.officechat.service.JwtService;
 import com.officechat.entity.UserSession;
 import com.officechat.repository.UserSessionRepository;
 
@@ -40,6 +41,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         this.sessionRepository = sessionRepository;
     }
 
+    // Endpoint yang tidak membutuhkan autentikasi JWT.
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
 
@@ -66,24 +68,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
+        // Jika tidak ada token, lanjutkan ke Spring Security.
+        // Endpoint yang membutuhkan login akan ditolak oleh SecurityConfig.
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         try {
+
+            // Mengambil token dari Authorization header.
             String token = authHeader.substring(7);
 
+            // Validasi dan membaca claims JWT.
             Claims claims = jwtService.extractClaims(token);
 
             String tokenId = claims.getId();
             String email = claims.get("email", String.class);
 
             if (tokenId == null || email == null) {
-                filterChain.doFilter(request, response);
+                sendUnauthorized(
+                    response,
+                    "Token tidak memiliki informasi yang valid"
+                );
                 return;
             }
 
+            // Memeriksa session token di Oracle.
             UserSession session = sessionRepository
                 .findByTokenIdAndRevokedAtIsNull(tokenId)
                 .orElse(null);
@@ -92,10 +103,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     || session.getExpiresAt() == null
                     || !session.getExpiresAt().isAfter(LocalDateTime.now())) {
 
-                filterChain.doFilter(request, response);
+                sendUnauthorized(
+                    response,
+                    "Session tidak ditemukan atau sudah kedaluwarsa"
+                );
                 return;
             }
 
+            // Membuat autentikasi jika belum tersedia.
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
 
                 UserDetails userDetails =
@@ -117,15 +132,40 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .setAuthentication(authentication);
             }
 
+            // Melanjutkan request setelah autentikasi.
+            filterChain.doFilter(request, response);
+
         } catch (JwtException | IllegalArgumentException ex) {
 
             SecurityContextHolder.clearContext();
 
+            sendUnauthorized(
+                response,
+                "Token JWT tidak valid"
+            );
+
         } catch (AuthenticationException ex) {
 
             SecurityContextHolder.clearContext();
-        }
 
-        filterChain.doFilter(request, response);
+            sendUnauthorized(
+                response,
+                "User tidak dapat diautentikasi"
+            );
+        }
+    }
+
+    // Mengirim respons 401.
+    private void sendUnauthorized(
+            HttpServletResponse response,
+            String message) throws IOException {
+
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+
+        response.getWriter().write(
+            "{\"status\":401,\"message\":\"" + message + "\"}"
+        );
     }
 }

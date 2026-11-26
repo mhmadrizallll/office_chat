@@ -24,7 +24,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureMessageBroker(MessageBrokerRegistry config) {
 
         config.enableSimpleBroker("/topic", "/queue");
+
         config.setApplicationDestinationPrefixes("/app");
+
         config.setUserDestinationPrefix("/user");
     }
 
@@ -35,8 +37,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
             .setAllowedOriginPatterns(
                 "http://localhost:3000",
                 "http://127.0.0.1:3000"
-            )
-            .withSockJS();
+            );
     }
 
     @Override

@@ -1,3 +1,4 @@
+
 package com.officechat.security;
 
 import com.officechat.entity.UserSession;
@@ -14,12 +15,12 @@ import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
 
-import java.security.Principal;
-import java.time.LocalDateTime;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -55,7 +56,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             MessageChannel channel) {
 
         StompHeaderAccessor accessor =
-            StompHeaderAccessor.wrap(message);
+            MessageHeaderAccessor.getAccessor(
+                message,
+                StompHeaderAccessor.class
+            );
+
+        if (accessor == null) {
+            return message;
+        }
 
         StompCommand command = accessor.getCommand();
 
@@ -63,7 +71,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        // 1. Validasi token ketika CONNECT.
+        // 1. Autentikasi JWT ketika CONNECT.
         if (StompCommand.CONNECT.equals(command)) {
 
             String authorization =
@@ -77,6 +85,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
             String token = authorization.substring(7);
 
             try {
+
                 Claims claims = jwtService.extractClaims(token);
 
                 String tokenId = claims.getId();
@@ -93,82 +102,110 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
                     );
 
                 if (session.getExpiresAt() == null ||
-                        !session.getExpiresAt().isAfter(LocalDateTime.now())) {
-                    throw new MessagingException("Sesi login sudah berakhir");
+                        !session.getExpiresAt().isAfter(
+                            java.time.LocalDateTime.now()
+                        )) {
+
+                    throw new MessagingException(
+                        "Sesi login sudah berakhir"
+                    );
                 }
 
                 UserDetails userDetails =
                     userDetailsService.loadUserByUsername(email);
 
                 if (!(userDetails instanceof UserPrincipal principal)) {
-                    throw new MessagingException("Identitas pengguna tidak valid");
+                    throw new MessagingException(
+                        "Identitas pengguna tidak valid"
+                    );
                 }
 
+                // Simpan identitas pengguna ke sesi STOMP.
                 accessor.setUser(principal);
 
-            } catch (JwtException | IllegalArgumentException ex) {
-                throw new MessagingException("Token JWT tidak valid", ex);
+            } catch (JwtException |
+                     IllegalArgumentException |
+                     AuthenticationException ex) {
+
+                throw new MessagingException(
+                    "Autentikasi WebSocket gagal",
+                    ex
+                );
             }
 
             return message;
         }
 
-        // 2. Pastikan hanya anggota percakapan yang boleh berlangganan.
+        // Pastikan pengguna sudah terautentikasi.
+        if (accessor.getUser() == null ||
+                !(accessor.getUser() instanceof UserPrincipal user)) {
+
+            throw new MessagingException(
+                "Pengguna belum terautentikasi"
+            );
+        }
+
+        // 2. Validasi subscription.
         if (StompCommand.SUBSCRIBE.equals(command)) {
 
-            Principal principal = accessor.getUser();
             String destination = accessor.getDestination();
-
-            if (!(principal instanceof UserPrincipal user)) {
-                throw new MessagingException("Pengguna belum terautentikasi");
-            }
 
             Matcher matcher = destination == null
                 ? null
                 : SUBSCRIBE_PATTERN.matcher(destination);
 
             if (matcher == null || !matcher.matches()) {
-                throw new MessagingException("Tujuan subscription tidak diizinkan");
+                throw new MessagingException(
+                    "Tujuan subscription tidak diizinkan"
+                );
             }
 
             Long conversationId = Long.valueOf(matcher.group(1));
 
-            boolean isMember = memberRepository
-                .existsByConversationConversationIdAndUserUserId(
-                    conversationId,
-                    user.getUserId()
-                );
-
-            if (!isMember) {
-                throw new MessagingException(
-                    "Kamu bukan anggota percakapan ini"
-                );
-            }
+            validateMembership(conversationId, user.getUserId());
 
             return message;
         }
 
-        // 3. Batasi pengiriman hanya melalui endpoint yang ditentukan.
+        // 3. Validasi pengiriman pesan.
         if (StompCommand.SEND.equals(command)) {
 
-            Principal principal = accessor.getUser();
             String destination = accessor.getDestination();
-
-            if (!(principal instanceof UserPrincipal)) {
-                throw new MessagingException("Pengguna belum terautentikasi");
-            }
 
             Matcher matcher = destination == null
                 ? null
                 : SEND_PATTERN.matcher(destination);
 
             if (matcher == null || !matcher.matches()) {
-                throw new MessagingException("Tujuan pengiriman tidak diizinkan");
+                throw new MessagingException(
+                    "Tujuan pengiriman tidak diizinkan"
+                );
             }
+
+            Long conversationId = Long.valueOf(matcher.group(1));
+
+            validateMembership(conversationId, user.getUserId());
 
             return message;
         }
 
         return message;
+    }
+
+    private void validateMembership(
+            Long conversationId,
+            Long userId) {
+
+        boolean isMember = memberRepository
+            .existsByConversationConversationIdAndUserUserId(
+                conversationId,
+                userId
+            );
+
+        if (!isMember) {
+            throw new MessagingException(
+                "Kamu bukan anggota percakapan ini"
+            );
+        }
     }
 }
